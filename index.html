@@ -57,14 +57,16 @@
                 backdrop-filter var(--header-transition);
   }
 
-  /* Scrolled state: compact header with glass effect */
+  /* Scrolled state: compact header with glass effect, single-row layout */
   body.scrolled .header {
-    padding: 12px 24px;
+    padding: 8px 24px;
     gap: 0;
     background: rgba(245, 245, 245, 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+    flex-direction: row;
+    align-items: center;
   }
 
   /* Row 1: Nav */
@@ -154,9 +156,44 @@
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
   }
 
-  /* Slightly narrower prompt when collapsed */
+  /* Prompt row fills remaining space in scrolled single-row layout */
+  body.scrolled .prompt-row {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+  }
+
   body.scrolled .prompt-box {
-    max-width: 480px;
+    max-width: none;
+  }
+
+  /* Nav row: don't shrink in scrolled mode */
+  body.scrolled .nav-row {
+    flex-shrink: 0;
+    margin-right: 12px;
+  }
+
+  /* Match control heights in scrolled state */
+  body.scrolled .btn-back,
+  body.scrolled .dropdown-select {
+    padding: 6px 12px;
+    font-size: 14px;
+    height: 36px;
+  }
+
+  body.scrolled .prompt-box {
+    height: 36px;
+    padding: 4px 4px 4px 12px;
+    align-items: center;
+  }
+
+  body.scrolled .prompt-input {
+    font-size: 14px;
+  }
+
+  body.scrolled .btn-submit {
+    padding: 5px 12px;
+    font-size: 13px;
   }
 
   .prompt-input {
@@ -346,15 +383,37 @@
   // Initial batch
   addCards(24);
 
-  // Infinite scroll observer — loads more cards when sentinel enters view
+  /* Infinite scroll observer — loads more cards when sentinel enters view.
+     After each batch, unobserve/reobserve the sentinel so a fresh
+     intersection event fires even if it never left the viewport
+     (fixes stall on very large viewports).
+     A bounded fill-loop adds batches until the page is scrollable
+     or a safety cap is reached (prevents runaway on huge screens). */
+  const loadSentinel = document.getElementById('loadSentinel');
+  const MAX_FILL_BATCHES = 10; // safety cap per fill cycle
+
+  function fillUntilScrollable() {
+    let batches = 0;
+    while (document.documentElement.scrollHeight <= window.innerHeight && batches < MAX_FILL_BATCHES) {
+      addCards(12);
+      batches++;
+    }
+  }
+
   const loadObserver = new IntersectionObserver(([entry]) => {
     if (entry.isIntersecting && !loading) {
       loading = true;
       addCards(12);
+      // Unobserve/reobserve to reset intersection state
+      loadObserver.unobserve(loadSentinel);
+      fillUntilScrollable();
+      loadObserver.observe(loadSentinel);
     }
   }, { rootMargin: '400px' });
 
-  loadObserver.observe(document.getElementById('loadSentinel'));
+  // Initial fill: ensure page is scrollable on large viewports
+  fillUntilScrollable();
+  loadObserver.observe(loadSentinel);
 </script>
 </body>
 </html>
