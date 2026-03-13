@@ -16,7 +16,6 @@
     --color-card: #e0e0e0;
     --radius: 8px;
     --header-gap: 12px;
-    --header-transition: 0.3s ease;
   }
 
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
@@ -40,7 +39,9 @@
 
   /* ── HEADER ──
      Single header element — no duplicate sticky bar.
-     Uses position:sticky for pinning; CSS transitions handle collapse. */
+     Uses position:sticky for pinning.
+     Layout changes (flex-direction, padding, gap) are INSTANT — no transitions
+     on reflow-causing properties. Only box-shadow fades smoothly. */
   .header {
     position: sticky;
     top: 0;
@@ -50,30 +51,30 @@
     flex-direction: column;
     gap: var(--header-gap);
     background: var(--color-bg);
-    transition: padding var(--header-transition),
-                gap var(--header-transition),
-                background var(--header-transition),
-                box-shadow var(--header-transition),
-                backdrop-filter var(--header-transition);
+    transition: box-shadow 0.2s ease;
   }
 
-  /* Scrolled state: compact header with glass effect, single-row layout */
+  /* Scrolled state: compact single-row layout, transparent + click-through.
+     pointer-events:none lets clicks pass through to content behind;
+     interactive children re-enable pointer-events individually. */
   body.scrolled .header {
     padding: 8px 24px;
     gap: 0;
-    background: rgba(245, 245, 245, 0.85);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
     flex-direction: row;
     align-items: center;
+    pointer-events: none;
   }
 
-  /* Row 1: Nav */
+  /* Row 1: Nav — re-enable pointer events for interactive controls */
   .nav-row {
     display: flex;
     align-items: center;
     gap: 10px;
+    pointer-events: auto;
   }
 
   .btn-back {
@@ -109,15 +110,13 @@
   }
   .dropdown-select:hover { border-color: var(--color-text); }
 
-  /* Row 2: Title — collapses via CSS when scrolled */
+  /* Row 2: Title — collapses instantly when scrolled (no transition to avoid reflow stutter) */
   .title-row {
     text-align: center;
     max-height: 80px;
     opacity: 1;
     overflow: hidden;
-    transition: max-height var(--header-transition),
-                opacity var(--header-transition),
-                margin var(--header-transition);
+    transition: opacity 0.15s ease;
   }
   .title-row h1 {
     font-size: clamp(2rem, 5vw, 3.2rem);
@@ -133,11 +132,11 @@
     margin: 0;
   }
 
-  /* Row 3: Prompt */
+  /* Row 3: Prompt — re-enable pointer events for interactive controls */
   .prompt-row {
     display: flex;
     justify-content: center;
-    transition: margin var(--header-transition);
+    pointer-events: auto;
   }
 
   .prompt-box {
@@ -149,7 +148,7 @@
     width: 100%;
     max-width: 560px;
     background: #fff;
-    transition: border-color 0.15s, box-shadow 0.15s, max-width var(--header-transition);
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   .prompt-box:focus-within {
     border-color: var(--color-text);

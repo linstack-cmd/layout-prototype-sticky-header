@@ -34,3 +34,9 @@ A single-page layout prototype with a collapsible sticky header, search prompt, 
 - **Duplicate sticky bar HTML** — replaced by a single `<header>` that transforms via CSS.
 - **`scroll` event listener** — replaced by `IntersectionObserver` (passive, no jank).
 - **Capped infinite scroll** — now truly unlimited with a loading guard.
+
+### v3 Polish
+
+- **Click-through sticky header** — scrolled header uses `pointer-events: none` so clicks pass through to grid content behind it. Interactive controls (nav buttons, dropdown, prompt box) re-enable `pointer-events: auto` individually.
+- **No backdrop/opaque layer** — scrolled header is fully transparent (no background, no backdrop-filter), eliminating any visual or interaction blocking.
+- **Stutter-free mode switch** — removed CSS transitions from layout-thrashing properties (`flex-direction`, `padding`, `gap`, `max-height` on title). Layout changes are instant; only `opacity` and `box-shadow` animate smoothly. This eliminates reflow jank when switching between normal and sticky layouts.
