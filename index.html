@@ -15,7 +15,7 @@
     --color-border: #ccc;
     --color-card: #e0e0e0;
     --radius: 8px;
-    --header-gap: 16px;
+    --header-gap: 24px;
 
     /* 2-phase sticky transition config */
     --presticky-offset: 150px;  /* how far before dock threshold to trigger presticky */
@@ -51,7 +51,7 @@
     position: sticky;
     top: 0;
     z-index: 100;
-    padding: 20px 24px 16px;
+    padding: 32px 24px 24px;
     display: flex;
     flex-direction: column;
     gap: var(--header-gap);
@@ -64,7 +64,7 @@
      Header is still in column layout — no reflow yet. */
   body.presticky .title-row {
     opacity: 0.6;
-    max-height: 60px;
+    max-height: 80px;
     transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
   }
 
@@ -136,10 +136,10 @@
   /* Row 2: Title — transitions driven by state classes */
   .title-row {
     text-align: center;
-    max-height: 80px;
+    max-height: 110px;
     opacity: 1;
     overflow: hidden;
-    padding: 6px 0;
+    padding: 14px 0;
     /* Smooth fade for both presticky and return-to-default */
     transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
   }
@@ -315,7 +315,7 @@
   /* ── RESPONSIVE ── */
   @media (max-width: 500px) {
     .grid { grid-template-columns: repeat(2, 1fr); padding: 8px 12px 40px; }
-    .header { padding: 16px 12px 12px; }
+    .header { padding: 24px 12px 18px; }
     body.docked .header { padding: 10px 12px; }
   }
 </style>
