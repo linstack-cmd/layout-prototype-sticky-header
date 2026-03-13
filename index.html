@@ -376,7 +376,12 @@
      ────────────────────────────────────────────────────── */
 
   const PRESTICKY_OFFSET = 150; // px before dock threshold to trigger presticky
+  const MIN_DOCK_SCROLL = 120;  // minimum scrollY to ENTER docked state
+  const DOCK_EXIT_SCROLL = 60;  // scrollY below which we EXIT docked (hysteresis band)
   const body = document.body;
+
+  // Track whether the dock sentinel is currently out of view
+  let dockSentinelGone = false;
 
   // State helpers — ensure only one state class is active at a time
   function setState(state) {
@@ -411,12 +416,16 @@
 
   /* Observer 2: Dock phase
      No rootMargin — fires when sentinel actually leaves the viewport.
-     This is the same threshold as the original 'scrolled' behavior. */
+     Combined with scrollY guard so tiny scrolls don't trigger docked mode. */
   const dockObserver = new IntersectionObserver(
     ([entry]) => {
+      dockSentinelGone = !entry.isIntersecting;
       if (!entry.isIntersecting) {
-        // Sentinel gone → full dock
-        setState('docked');
+        // Sentinel gone — only dock if scrolled far enough
+        if (window.scrollY >= MIN_DOCK_SCROLL) {
+          setState('docked');
+        }
+        // If not far enough, scroll listener below will promote when threshold met
       } else {
         // Sentinel back → drop from docked to presticky
         // (prestickyObserver will further drop to default if needed)
@@ -430,6 +439,24 @@
 
   prestickyObserver.observe(document.getElementById('prestickySentinel'));
   dockObserver.observe(document.getElementById('dockSentinel'));
+
+  /* ── Scroll-based state reconciliation ──
+     The IntersectionObserver only fires on crossing boundaries. If the user
+     scrolls past the sentinel but hasn't hit MIN_DOCK_SCROLL yet, the observer
+     won't re-fire. This passive scroll listener fills the gap and also handles
+     the exit hysteresis band to prevent flicker near the threshold. */
+  window.addEventListener('scroll', () => {
+    const y = window.scrollY;
+
+    if (dockSentinelGone && !body.classList.contains('docked') && y >= MIN_DOCK_SCROLL) {
+      // Sentinel already gone + crossed min threshold → promote to docked
+      setState('docked');
+    } else if (body.classList.contains('docked') && y < DOCK_EXIT_SCROLL) {
+      // Scrolled back into hysteresis band → drop to presticky
+      // (prestickyObserver handles the rest back to default)
+      setState('presticky');
+    }
+  }, { passive: true });
 
   /* ── Textarea auto-resize (fallback for browsers without field-sizing) ── */
   if (!CSS.supports('field-sizing', 'content')) {
