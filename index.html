@@ -15,7 +15,7 @@
     --color-border: #ccc;
     --color-card: #e0e0e0;
     --radius: 8px;
-    --header-gap: 12px;
+    --header-gap: 16px;
 
     /* 2-phase sticky transition config */
     --presticky-offset: 150px;  /* how far before dock threshold to trigger presticky */
@@ -63,8 +63,8 @@
      Title starts fading. Nav controls begin subtle slide-up into sticky position.
      Header is still in column layout — no reflow yet. */
   body.presticky .title-row {
-    opacity: 0.3;
-    max-height: 40px;
+    opacity: 0.6;
+    max-height: 60px;
     transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
   }
 
@@ -139,6 +139,7 @@
     max-height: 80px;
     opacity: 1;
     overflow: hidden;
+    padding: 6px 0;
     /* Smooth fade for both presticky and return-to-default */
     transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
   }
@@ -389,6 +390,9 @@
   const prestickyObserver = new IntersectionObserver(
     ([entry]) => {
       if (!entry.isIntersecting) {
+        // Guard: don't activate presticky at scroll=0 — the negative rootMargin
+        // can cause the sentinel to appear non-intersecting before any scroll.
+        if (window.scrollY < 10) return;
         // Sentinel left the expanded viewport → at least presticky
         // (dockObserver will upgrade to 'docked' if needed)
         if (!body.classList.contains('docked')) {
