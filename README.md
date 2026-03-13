@@ -8,15 +8,30 @@ A single-page layout prototype with a collapsible sticky header, search prompt, 
 
 ## Architecture Notes
 
+### 2-Phase Sticky Transition (v5)
+
+The header collapse uses a **3-state machine** for smoother, more intentional transitions:
+
+| State | Trigger | Visual |
+|---|---|---|
+| **default** | Page at top | Full header: nav, title, prompt in column layout |
+| **presticky** | ~150px before dock threshold | Title fades to 30% opacity and shrinks; nav nudges upward — an "anticipation" phase |
+| **docked** | Prompt reaches sticky point | Compact single-row layout, transparent + click-through (same as previous `scrolled`) |
+
+Two `IntersectionObserver` instances watch separate sentinels:
+- **prestickySentinel** uses a negative `rootMargin` to fire early (configurable via `--presticky-offset`)
+- **dockSentinel** fires at the actual sticky threshold
+
+Scrolling up reverses cleanly: `docked → presticky → default`. Title opacity and nav transforms use CSS transitions (`--transition-speed: 0.25s`); layout-thrashing properties (flex-direction, padding) switch instantly to avoid reflow jank.
+
 ### CSS-driven (no JS needed)
 
 | Behavior | How |
 |---|---|
 | **Header pinning** | `position: sticky; top: 0` on `<header>` — no duplicate DOM element |
-| **Title collapse/expand** | `max-height` + `opacity` transition triggered by `.scrolled` class on `<body>` |
-| **Backdrop blur on scroll** | `backdrop-filter: blur()` + semi-transparent background, applied via `.scrolled` |
-| **Compact single-row layout** | `body.scrolled .header` switches to `flex-direction: row`, placing nav controls and prompt box on the same horizontal line with matched 36px heights |
-| **Prompt box narrowing** | `max-width` transition on `.prompt-box` when scrolled |
+| **Title collapse/expand** | `max-height` + `opacity` driven by state classes (`presticky`, `docked`) on `<body>` |
+| **Compact single-row layout** | `body.docked .header` switches to `flex-direction: row` |
+| **Prompt box narrowing** | `max-width` transition on `.prompt-box` when docked |
 | **Textarea auto-resize** | CSS `field-sizing: content` (modern browsers); JS fallback only when unsupported |
 | **Card entrance animation** | `@keyframes fadeUp` with staggered `animation-delay` |
 | **Responsive grid** | `grid-template-columns: repeat(auto-fill, minmax(180px, 1fr))` — no JS breakpoints |
@@ -25,18 +40,13 @@ A single-page layout prototype with a collapsible sticky header, search prompt, 
 
 | Behavior | How |
 |---|---|
-| **Scroll class toggle** | `IntersectionObserver` on a sentinel `<div>` above the header. Adds/removes `body.scrolled`. No `scroll` event listener. |
-| **Infinite card loading** | `IntersectionObserver` on a sentinel below the grid. Appends 12 cards per trigger with a `loading` guard to prevent duplicates. Uses `DocumentFragment` for batch DOM insertion. Uncapped — loads indefinitely. After each batch, the sentinel is unobserved/reobserved to reset intersection state, plus a bounded fill loop ensures enough content loads to make the page scrollable on very large viewports (capped at 10 extra batches per cycle). |
+| **State machine** | Two `IntersectionObserver` instances on sentinel elements. `setState()` ensures exactly one class (`presticky` or `docked`) is active at a time. No `scroll` event listener. |
+| **Infinite card loading** | `IntersectionObserver` on a sentinel below the grid. Appends 12 cards per trigger with a `loading` guard. Uses `DocumentFragment` for batch DOM insertion. Bounded fill loop for large viewports. |
 | **Textarea fallback** | `input` event listener that sets `height = scrollHeight`, only attached when `CSS.supports('field-sizing', 'content')` is false. |
 
-### What was removed from the original
+### Key design choices
 
-- **Duplicate sticky bar HTML** — replaced by a single `<header>` that transforms via CSS.
-- **`scroll` event listener** — replaced by `IntersectionObserver` (passive, no jank).
-- **Capped infinite scroll** — now truly unlimited with a loading guard.
-
-### v3 Polish
-
-- **Click-through sticky header** — scrolled header uses `pointer-events: none` so clicks pass through to grid content behind it. Interactive controls (nav buttons, dropdown, prompt box) re-enable `pointer-events: auto` individually.
-- **No backdrop/opaque layer** — scrolled header is fully transparent (no background, no backdrop-filter), eliminating any visual or interaction blocking.
-- **Stutter-free mode switch** — removed CSS transitions from layout-thrashing properties (`flex-direction`, `padding`, `gap`, `max-height` on title). Layout changes are instant; only `opacity` and `box-shadow` animate smoothly. This eliminates reflow jank when switching between normal and sticky layouts.
+- **Click-through sticky header** — docked header uses `pointer-events: none`; interactive children re-enable individually.
+- **No backdrop/opaque layer** — docked header is fully transparent.
+- **Stutter-free mode switch** — no CSS transitions on reflow properties (`flex-direction`, `padding`, `gap`). Only `opacity` and `transform` animate.
+- **Anticipation phase** — the presticky state gives visual feedback before the layout shift, making the dock feel intentional rather than abrupt.

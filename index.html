@@ -16,6 +16,10 @@
     --color-card: #e0e0e0;
     --radius: 8px;
     --header-gap: 12px;
+
+    /* 2-phase sticky transition config */
+    --presticky-offset: 150px;  /* how far before dock threshold to trigger presticky */
+    --transition-speed: 0.25s;
   }
 
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
@@ -27,21 +31,22 @@
     min-height: 100vh;
   }
 
-  /* ── SCROLL SENTINEL ──
-     Invisible element above the header.
-     When it leaves the viewport, JS adds .scrolled to <body>.
-     This is the ONLY scroll-detection mechanism — no scroll listeners. */
-  .scroll-sentinel {
+  /* ── SCROLL SENTINELS ──
+     Two invisible sentinels drive the 3-state machine:
+     1. presticky-sentinel: further from top, triggers presticky phase
+     2. dock-sentinel: at the top, triggers docked phase
+     States: default → presticky → docked (and reverse on scroll-up) */
+  .scroll-sentinel,
+  .presticky-sentinel {
     height: 1px;
     width: 100%;
     pointer-events: none;
   }
 
   /* ── HEADER ──
-     Single header element — no duplicate sticky bar.
-     Uses position:sticky for pinning.
-     Layout changes (flex-direction, padding, gap) are INSTANT — no transitions
-     on reflow-causing properties. Only box-shadow fades smoothly. */
+     Single header element — sticky-positioned.
+     Layout changes are INSTANT (no transitions on reflow properties).
+     Opacity/transform transitions provide smooth visual feedback. */
   .header {
     position: sticky;
     top: 0;
@@ -54,10 +59,26 @@
     transition: box-shadow 0.2s ease;
   }
 
-  /* Scrolled state: compact single-row layout, transparent + click-through.
+  /* ── PHASE 1: PRESTICKY ──
+     Title starts fading. Nav controls begin subtle slide-up into sticky position.
+     Header is still in column layout — no reflow yet. */
+  body.presticky .title-row {
+    opacity: 0.3;
+    max-height: 40px;
+    transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
+  }
+
+  /* Nav row gets a subtle upward nudge to anticipate the dock */
+  body.presticky .nav-row {
+    transform: translateY(-2px);
+    transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
+  }
+
+  /* ── PHASE 2: DOCKED ──
+     Compact single-row layout, transparent + click-through.
      pointer-events:none lets clicks pass through to content behind;
      interactive children re-enable pointer-events individually. */
-  body.scrolled .header {
+  body.docked .header {
     padding: 8px 24px;
     gap: 0;
     background: transparent;
@@ -75,6 +96,8 @@
     align-items: center;
     gap: 10px;
     pointer-events: auto;
+    /* Smooth transitions for both phases */
+    transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
   }
 
   .btn-back {
@@ -110,13 +133,14 @@
   }
   .dropdown-select:hover { border-color: var(--color-text); }
 
-  /* Row 2: Title — collapses instantly when scrolled (no transition to avoid reflow stutter) */
+  /* Row 2: Title — transitions driven by state classes */
   .title-row {
     text-align: center;
     max-height: 80px;
     opacity: 1;
     overflow: hidden;
-    transition: opacity 0.15s ease;
+    /* Smooth fade for both presticky and return-to-default */
+    transition: opacity var(--transition-speed) ease, max-height var(--transition-speed) ease;
   }
   .title-row h1 {
     font-size: clamp(2rem, 5vw, 3.2rem);
@@ -125,11 +149,13 @@
     line-height: 1.1;
   }
 
-  /* Scrolled: title collapses to zero height */
-  body.scrolled .title-row {
+  /* Docked: title fully collapsed */
+  body.docked .title-row {
     max-height: 0;
     opacity: 0;
     margin: 0;
+    /* Instant collapse to avoid reflow stutter during dock */
+    transition: none;
   }
 
   /* Row 3: Prompt — re-enable pointer events for interactive controls */
@@ -155,34 +181,35 @@
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
   }
 
-  /* Prompt row fills remaining space in scrolled single-row layout */
-  body.scrolled .prompt-row {
+  /* Prompt row fills remaining space in docked single-row layout */
+  body.docked .prompt-row {
     flex: 1;
     min-width: 0;
     margin: 0;
   }
 
-  body.scrolled .prompt-box {
+  body.docked .prompt-box {
     max-width: none;
   }
 
-  /* Nav row: don't shrink in scrolled mode, vertically align with first line of prompt */
-  body.scrolled .nav-row {
+  /* Nav row: don't shrink in docked mode, vertically align with first line of prompt */
+  body.docked .nav-row {
     flex-shrink: 0;
     margin-right: 12px;
     margin-top: 2px;
+    transform: none;
   }
 
-  /* Scrolled state: keep controls visually identical to normal state.
+  /* Docked state: keep controls visually identical to normal state.
      No explicit height — let natural sizing from shared padding/font handle it.
      Prompt box uses min-height so multiline content isn't clipped. */
-  body.scrolled .btn-back,
-  body.scrolled .dropdown-select {
+  body.docked .btn-back,
+  body.docked .dropdown-select {
     padding: 6px 12px;
     font-size: 14px;
   }
 
-  body.scrolled .prompt-box {
+  body.docked .prompt-box {
     min-height: 36px;
     height: auto;
     padding: 6px 6px 6px 14px;
@@ -191,12 +218,12 @@
     overflow-y: auto;
   }
 
-  body.scrolled .prompt-input {
+  body.docked .prompt-input {
     font-size: 14px;
     max-height: 96px;
   }
 
-  body.scrolled .btn-submit {
+  body.docked .btn-submit {
     padding: 7px 14px;
     font-size: 14px;
   }
@@ -288,16 +315,21 @@
   @media (max-width: 500px) {
     .grid { grid-template-columns: repeat(2, 1fr); padding: 8px 12px 40px; }
     .header { padding: 16px 12px 12px; }
-    body.scrolled .header { padding: 10px 12px; }
+    body.docked .header { padding: 10px 12px; }
   }
 </style>
 </head>
 <body>
 
-<!-- Scroll sentinel: when this leaves the viewport, header collapses -->
-<div class="scroll-sentinel" id="scrollSentinel" aria-hidden="true"></div>
+<!-- Presticky sentinel: triggers phase 1 (anticipation).
+     Placed above the dock sentinel so it leaves the viewport first. -->
+<div class="presticky-sentinel" id="prestickySentinel" aria-hidden="true"></div>
 
-<!-- SINGLE HEADER — sticky-positioned, CSS-driven collapse -->
+<!-- Dock sentinel: triggers phase 2 (full dock).
+     When this leaves the viewport, prompt reaches sticky threshold. -->
+<div class="scroll-sentinel" id="dockSentinel" aria-hidden="true"></div>
+
+<!-- SINGLE HEADER — sticky-positioned, 2-phase state-driven collapse -->
 <header class="header">
   <div class="nav-row">
     <button class="btn-back" aria-label="Go back">← Back</button>
@@ -326,21 +358,76 @@
 <div class="load-sentinel" id="loadSentinel" aria-hidden="true"></div>
 
 <script>
-  /* ──────────────────────────────────────────────
-     JS is minimal — only three responsibilities:
-     1. Toggle body.scrolled class via IntersectionObserver
-     2. Textarea auto-resize (fallback for browsers without field-sizing)
-     3. Infinite scroll: generate + append placeholder cards
-     ────────────────────────────────────────────── */
+  /* ──────────────────────────────────────────────────────
+     2-Phase Sticky Transition — State Machine
+     ──────────────────────────────────────────────────────
+     States (on <body>):
+       (none)     → default: full header, column layout
+       presticky  → phase 1: title fading, nav nudging up (anticipation)
+       docked     → phase 2: compact row layout, transparent, click-through
 
-  /* 1 ▸ Scroll detection via IntersectionObserver (no scroll listener) */
-  const scrollObserver = new IntersectionObserver(
-    ([entry]) => document.body.classList.toggle('scrolled', !entry.isIntersecting),
+     Two IntersectionObservers drive the state machine:
+       1. prestickySentinel — fires first (has rootMargin offset)
+       2. dockSentinel — fires at actual sticky threshold
+
+     Scroll down: default → presticky → docked
+     Scroll up:   docked → presticky → default
+     ────────────────────────────────────────────────────── */
+
+  const PRESTICKY_OFFSET = 150; // px before dock threshold to trigger presticky
+  const body = document.body;
+
+  // State helpers — ensure only one state class is active at a time
+  function setState(state) {
+    body.classList.remove('presticky', 'docked');
+    if (state) body.classList.add(state);
+  }
+
+  /* Observer 1: Presticky phase
+     Uses a positive rootMargin so it fires BEFORE the sentinel
+     actually leaves the viewport — giving us an anticipation zone. */
+  const prestickyObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry.isIntersecting) {
+        // Sentinel left the expanded viewport → at least presticky
+        // (dockObserver will upgrade to 'docked' if needed)
+        if (!body.classList.contains('docked')) {
+          setState('presticky');
+        }
+      } else {
+        // Sentinel re-entered → back to default (scrolling up)
+        // Only revert if we're in presticky, not docked
+        if (body.classList.contains('presticky')) {
+          setState(null);
+        }
+      }
+    },
+    { threshold: 0, rootMargin: `-${PRESTICKY_OFFSET}px 0px 0px 0px` }
+  );
+
+  /* Observer 2: Dock phase
+     No rootMargin — fires when sentinel actually leaves the viewport.
+     This is the same threshold as the original 'scrolled' behavior. */
+  const dockObserver = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry.isIntersecting) {
+        // Sentinel gone → full dock
+        setState('docked');
+      } else {
+        // Sentinel back → drop from docked to presticky
+        // (prestickyObserver will further drop to default if needed)
+        if (body.classList.contains('docked')) {
+          setState('presticky');
+        }
+      }
+    },
     { threshold: 0 }
   );
-  scrollObserver.observe(document.getElementById('scrollSentinel'));
 
-  /* 2 ▸ Textarea auto-resize (skipped if CSS field-sizing is supported) */
+  prestickyObserver.observe(document.getElementById('prestickySentinel'));
+  dockObserver.observe(document.getElementById('dockSentinel'));
+
+  /* ── Textarea auto-resize (fallback for browsers without field-sizing) ── */
   if (!CSS.supports('field-sizing', 'content')) {
     document.querySelectorAll('.prompt-input').forEach(ta => {
       ta.style.height = 'auto';
@@ -351,7 +438,7 @@
     });
   }
 
-  /* 3 ▸ Infinite scroll with placeholder cards */
+  /* ── Infinite scroll with placeholder cards ── */
   const grid = document.getElementById('grid');
   const hues = [0, 30, 60, 120, 180, 210, 260, 300, 340];
   let cardCount = 0;
@@ -390,12 +477,9 @@
 
   /* Infinite scroll observer — loads more cards when sentinel enters view.
      After each batch, unobserve/reobserve the sentinel so a fresh
-     intersection event fires even if it never left the viewport
-     (fixes stall on very large viewports).
-     A bounded fill-loop adds batches until the page is scrollable
-     or a safety cap is reached (prevents runaway on huge screens). */
+     intersection event fires even if it never left the viewport. */
   const loadSentinel = document.getElementById('loadSentinel');
-  const MAX_FILL_BATCHES = 10; // safety cap per fill cycle
+  const MAX_FILL_BATCHES = 10;
 
   function fillUntilScrollable() {
     let batches = 0;
@@ -409,14 +493,12 @@
     if (entry.isIntersecting && !loading) {
       loading = true;
       addCards(12);
-      // Unobserve/reobserve to reset intersection state
       loadObserver.unobserve(loadSentinel);
       fillUntilScrollable();
       loadObserver.observe(loadSentinel);
     }
   }, { rootMargin: '400px' });
 
-  // Initial fill: ensure page is scrollable on large viewports
   fillUntilScrollable();
   loadObserver.observe(loadSentinel);
 </script>
