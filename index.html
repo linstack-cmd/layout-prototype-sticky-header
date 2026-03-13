@@ -65,7 +65,7 @@
     -webkit-backdrop-filter: none;
     box-shadow: none;
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     pointer-events: none;
   }
 
@@ -166,33 +166,39 @@
     max-width: none;
   }
 
-  /* Nav row: don't shrink in scrolled mode */
+  /* Nav row: don't shrink in scrolled mode, vertically align with first line of prompt */
   body.scrolled .nav-row {
     flex-shrink: 0;
     margin-right: 12px;
+    margin-top: 2px;
   }
 
-  /* Match control heights in scrolled state */
+  /* Scrolled state: keep controls visually identical to normal state.
+     No explicit height — let natural sizing from shared padding/font handle it.
+     Prompt box uses min-height so multiline content isn't clipped. */
   body.scrolled .btn-back,
   body.scrolled .dropdown-select {
     padding: 6px 12px;
     font-size: 14px;
-    height: 36px;
   }
 
   body.scrolled .prompt-box {
-    height: 36px;
-    padding: 4px 4px 4px 12px;
-    align-items: center;
+    min-height: 36px;
+    height: auto;
+    padding: 6px 6px 6px 14px;
+    align-items: flex-end;
+    max-height: 120px;
+    overflow-y: auto;
   }
 
   body.scrolled .prompt-input {
     font-size: 14px;
+    max-height: 96px;
   }
 
   body.scrolled .btn-submit {
-    padding: 5px 12px;
-    font-size: 13px;
+    padding: 7px 14px;
+    font-size: 14px;
   }
 
   .prompt-input {
