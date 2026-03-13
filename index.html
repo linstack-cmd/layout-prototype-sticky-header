@@ -16,6 +16,7 @@
     --color-card: #e0e0e0;
     --radius: 8px;
     --header-gap: 12px;
+    --header-transition: 0.3s ease;
   }
 
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap');
@@ -27,14 +28,43 @@
     min-height: 100vh;
   }
 
-  /* ── HEADER (expanded state) ── */
+  /* ── SCROLL SENTINEL ──
+     Invisible element above the header.
+     When it leaves the viewport, JS adds .scrolled to <body>.
+     This is the ONLY scroll-detection mechanism — no scroll listeners. */
+  .scroll-sentinel {
+    height: 1px;
+    width: 100%;
+    pointer-events: none;
+  }
+
+  /* ── HEADER ──
+     Single header element — no duplicate sticky bar.
+     Uses position:sticky for pinning; CSS transitions handle collapse. */
   .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
     padding: 20px 24px 16px;
     display: flex;
     flex-direction: column;
     gap: var(--header-gap);
-    position: relative;
-    z-index: 10;
+    background: var(--color-bg);
+    transition: padding var(--header-transition),
+                gap var(--header-transition),
+                background var(--header-transition),
+                box-shadow var(--header-transition),
+                backdrop-filter var(--header-transition);
+  }
+
+  /* Scrolled state: compact header with glass effect */
+  body.scrolled .header {
+    padding: 12px 24px;
+    gap: 0;
+    background: rgba(245, 245, 245, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
   }
 
   /* Row 1: Nav */
@@ -77,11 +107,15 @@
   }
   .dropdown-select:hover { border-color: var(--color-text); }
 
-  /* Row 2: Title */
+  /* Row 2: Title — collapses via CSS when scrolled */
   .title-row {
     text-align: center;
-    transition: opacity 0.25s, max-height 0.3s;
+    max-height: 80px;
+    opacity: 1;
     overflow: hidden;
+    transition: max-height var(--header-transition),
+                opacity var(--header-transition),
+                margin var(--header-transition);
   }
   .title-row h1 {
     font-size: clamp(2rem, 5vw, 3.2rem);
@@ -90,10 +124,18 @@
     line-height: 1.1;
   }
 
+  /* Scrolled: title collapses to zero height */
+  body.scrolled .title-row {
+    max-height: 0;
+    opacity: 0;
+    margin: 0;
+  }
+
   /* Row 3: Prompt */
   .prompt-row {
     display: flex;
     justify-content: center;
+    transition: margin var(--header-transition);
   }
 
   .prompt-box {
@@ -105,11 +147,16 @@
     width: 100%;
     max-width: 560px;
     background: #fff;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s, max-width var(--header-transition);
   }
   .prompt-box:focus-within {
     border-color: var(--color-text);
-    box-shadow: 0 0 0 2px rgba(0,0,0,0.06);
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Slightly narrower prompt when collapsed */
+  body.scrolled .prompt-box {
+    max-width: 480px;
   }
 
   .prompt-input {
@@ -124,9 +171,16 @@
     overflow-y: auto;
     color: var(--color-text);
     background: transparent;
-    rows: 1;
   }
   .prompt-input::placeholder { color: var(--color-muted); }
+
+  /* CSS-only single-row textarea height (field-sizing) */
+  @supports (field-sizing: content) {
+    .prompt-input {
+      field-sizing: content;
+      min-height: 1lh;
+    }
+  }
 
   .btn-submit {
     background: var(--color-text);
@@ -143,58 +197,6 @@
     transition: opacity 0.15s;
   }
   .btn-submit:hover { opacity: 0.8; }
-
-  /* ── STICKY BAR (collapsed state) ── */
-  .sticky-bar {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    padding: 12px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-
-    /* transparent + click-through */
-    background: transparent;
-    pointer-events: none;
-
-    opacity: 0;
-    transform: translateY(-8px);
-    transition: opacity 0.25s, transform 0.25s;
-  }
-  .sticky-bar.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .sticky-bar .nav-row,
-  .sticky-bar .prompt-box {
-    pointer-events: auto;
-  }
-
-  .sticky-bar .nav-row {
-    flex-shrink: 0;
-  }
-
-  .sticky-bar .prompt-box {
-    max-width: 480px;
-    flex: 1;
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 1px 6px rgba(0,0,0,0.08);
-  }
-
-  .sticky-bar .btn-back,
-  .sticky-bar .dropdown-select {
-    background: rgba(255,255,255,0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 1px 6px rgba(0,0,0,0.08);
-  }
 
   /* ── IMAGE GRID ── */
   .grid {
@@ -224,7 +226,7 @@
     left: 8px;
     font-size: 11px;
     color: #fff;
-    background: rgba(0,0,0,0.45);
+    background: rgba(0, 0, 0, 0.45);
     padding: 2px 8px;
     border-radius: 4px;
   }
@@ -234,18 +236,27 @@
     to   { opacity: 1; transform: translateY(0); }
   }
 
+  /* ── LOAD SENTINEL ── */
+  .load-sentinel {
+    height: 1px;
+    width: 100%;
+  }
+
   /* ── RESPONSIVE ── */
   @media (max-width: 500px) {
     .grid { grid-template-columns: repeat(2, 1fr); padding: 8px 12px 40px; }
     .header { padding: 16px 12px 12px; }
-    .sticky-bar { padding: 10px 12px; }
+    body.scrolled .header { padding: 10px 12px; }
   }
 </style>
 </head>
 <body>
 
-<!-- EXPANDED HEADER -->
-<div class="header" id="header">
+<!-- Scroll sentinel: when this leaves the viewport, header collapses -->
+<div class="scroll-sentinel" id="scrollSentinel" aria-hidden="true"></div>
+
+<!-- SINGLE HEADER — sticky-positioned, CSS-driven collapse -->
+<header class="header">
   <div class="nav-row">
     <button class="btn-back" aria-label="Go back">← Back</button>
     <select class="dropdown-select" aria-label="Category selector">
@@ -255,103 +266,95 @@
       <option>3D Renders</option>
     </select>
   </div>
-  <div class="title-row" id="titleRow">
+  <div class="title-row">
     <h1>Explore Gallery</h1>
   </div>
   <div class="prompt-row">
     <div class="prompt-box">
-      <textarea class="prompt-input" id="promptExpanded" placeholder="Describe what you're looking for…" rows="1"></textarea>
+      <textarea class="prompt-input" placeholder="Describe what you're looking for…" rows="1"></textarea>
       <button class="btn-submit">Submit</button>
     </div>
   </div>
-</div>
-
-<!-- STICKY BAR (hidden until scroll) -->
-<div class="sticky-bar" id="stickyBar">
-  <div class="nav-row">
-    <button class="btn-back" aria-label="Go back">← Back</button>
-    <select class="dropdown-select" aria-label="Category selector">
-      <option>All Collections</option>
-      <option>Photography</option>
-      <option>Illustrations</option>
-      <option>3D Renders</option>
-    </select>
-  </div>
-  <div class="prompt-box">
-    <textarea class="prompt-input" id="promptSticky" placeholder="Describe what you're looking for…" rows="1"></textarea>
-    <button class="btn-submit">Submit</button>
-  </div>
-</div>
+</header>
 
 <!-- IMAGE GRID -->
 <div class="grid" id="grid"></div>
 
+<!-- Infinite-scroll sentinel -->
+<div class="load-sentinel" id="loadSentinel" aria-hidden="true"></div>
+
 <script>
-  /* ── Auto-grow textareas ── */
-  document.querySelectorAll('.prompt-input').forEach(ta => {
-    ta.style.height = 'auto';
-    ta.addEventListener('input', () => {
+  /* ──────────────────────────────────────────────
+     JS is minimal — only three responsibilities:
+     1. Toggle body.scrolled class via IntersectionObserver
+     2. Textarea auto-resize (fallback for browsers without field-sizing)
+     3. Infinite scroll: generate + append placeholder cards
+     ────────────────────────────────────────────── */
+
+  /* 1 ▸ Scroll detection via IntersectionObserver (no scroll listener) */
+  const scrollObserver = new IntersectionObserver(
+    ([entry]) => document.body.classList.toggle('scrolled', !entry.isIntersecting),
+    { threshold: 0 }
+  );
+  scrollObserver.observe(document.getElementById('scrollSentinel'));
+
+  /* 2 ▸ Textarea auto-resize (skipped if CSS field-sizing is supported) */
+  if (!CSS.supports('field-sizing', 'content')) {
+    document.querySelectorAll('.prompt-input').forEach(ta => {
       ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
+      ta.addEventListener('input', () => {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+      });
     });
-  });
-
-  /* ── Scroll: toggle sticky bar ── */
-  const header = document.getElementById('header');
-  const stickyBar = document.getElementById('stickyBar');
-  const titleRow = document.getElementById('titleRow');
-
-  function onScroll() {
-    const rect = header.getBoundingClientRect();
-    // activate sticky when header's bottom scrolls past viewport top
-    const collapsed = rect.bottom < 60;
-    stickyBar.classList.toggle('visible', collapsed);
   }
-  window.addEventListener('scroll', onScroll, { passive: true });
 
-  /* ── Placeholder image grid ── */
+  /* 3 ▸ Infinite scroll with placeholder cards */
   const grid = document.getElementById('grid');
   const hues = [0, 30, 60, 120, 180, 210, 260, 300, 340];
   let cardCount = 0;
+  let loading = false;
 
   function makePlaceholderSVG(index) {
     const hue = hues[index % hues.length];
     const sat = 25 + (index * 7) % 30;
     const light = 68 + (index * 3) % 12;
     return `data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">
-        <rect width="400" height="400" fill="hsl(${hue},${sat}%,${light}%)"/>
-        <text x="200" y="208" text-anchor="middle" font-family="system-ui" font-size="48" fill="rgba(255,255,255,0.5)">${index + 1}</text>
-      </svg>`
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400">` +
+      `<rect width="400" height="400" fill="hsl(${hue},${sat}%,${light}%)"/>` +
+      `<text x="200" y="208" text-anchor="middle" font-family="system-ui" font-size="48" fill="rgba(255,255,255,0.5)">${index + 1}</text>` +
+      `</svg>`
     )}`;
   }
 
   function addCards(count) {
+    const fragment = document.createDocumentFragment();
     for (let i = 0; i < count; i++) {
       const card = document.createElement('div');
       card.className = 'card';
       card.style.animationDelay = `${i * 30}ms`;
-      card.innerHTML = `
-        <img class="placeholder-img" src="${makePlaceholderSVG(cardCount)}" alt="Placeholder ${cardCount + 1}" loading="lazy">
-        <span class="label">#${cardCount + 1}</span>`;
-      grid.appendChild(card);
+      card.innerHTML =
+        `<img class="placeholder-img" src="${makePlaceholderSVG(cardCount)}" alt="Placeholder ${cardCount + 1}" loading="lazy">` +
+        `<span class="label">#${cardCount + 1}</span>`;
+      fragment.appendChild(card);
       cardCount++;
     }
+    grid.appendChild(fragment);
+    loading = false;
   }
 
   // Initial batch
   addCards(24);
 
-  // Infinite scroll
-  const observer = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting) addCards(12);
-  }, { rootMargin: '200px' });
+  // Infinite scroll observer — loads more cards when sentinel enters view
+  const loadObserver = new IntersectionObserver(([entry]) => {
+    if (entry.isIntersecting && !loading) {
+      loading = true;
+      addCards(12);
+    }
+  }, { rootMargin: '400px' });
 
-  // Sentinel element
-  const sentinel = document.createElement('div');
-  sentinel.style.height = '1px';
-  document.body.appendChild(sentinel);
-  observer.observe(sentinel);
+  loadObserver.observe(document.getElementById('loadSentinel'));
 </script>
 </body>
 </html>
