@@ -74,17 +74,10 @@
     transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
   }
 
-  /* Prompt row is NOT sticky during presticky — collapse it so only nav previews.
-     The prompt scrolls away naturally; it reappears only in docked compact row. */
-  body.presticky .prompt-row {
-    max-height: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    padding: 0;
-    margin: 0;
-    transition: max-height var(--transition-speed) ease, opacity var(--transition-speed) ease;
-  }
+  /* Presticky: prompt stays in normal flow — no collapse, no hiding.
+     Only nav controls get the anticipation preview; prompt remains
+     in its natural header position until the docked phase pulls it
+     into the compact sticky row. */
 
   /* ── PHASE 2: DOCKED ──
      Compact single-row layout, transparent + click-through.
@@ -172,7 +165,8 @@
   }
 
   /* Row 3: Prompt — re-enable pointer events for interactive controls.
-     max-height enables smooth collapse transition during presticky. */
+     Stays in normal flow through default and presticky phases;
+     only docked phase repositions it into the compact sticky row. */
   .prompt-row {
     display: flex;
     justify-content: center;
