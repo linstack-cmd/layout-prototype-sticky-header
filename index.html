@@ -131,13 +131,14 @@
     line-height: 1.1;
   }
 
-  /* Docked: title scrolled away, collapse to prevent ghost space. */
+  /* Docked: title invisible but PRESERVES LAYOUT SPACE.
+     Using visibility:hidden (not display:none / max-height:0) keeps the
+     element in flow so the dock-sentinel below it stays geometrically
+     stable across all states — critical for reliable undock math. */
   body.docked .title-row {
-    padding: 0;
-    margin: 0;
+    visibility: hidden;
+    pointer-events: none;
     opacity: 0;
-    max-height: 0;
-    overflow: hidden;
     transition: none;
   }
 
@@ -160,8 +161,11 @@
     transition: opacity var(--transition-speed) ease;
   }
 
+  /* Docked: flow-prompt invisible but PRESERVES LAYOUT SPACE.
+     Same reason as title-row: keeps dock-sentinel position stable. */
   body.docked .flow-prompt {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
   }
 
   .prompt-box {
@@ -353,6 +357,12 @@
   <h1>Explore Gallery</h1>
 </div>
 
+<!-- Dock sentinel — invisible, zero-height marker in normal document flow.
+     NEVER hidden or collapsed; its viewport-relative position drives ALL
+     state transitions (presticky / dock / undock). Placed between the
+     title and flow-prompt so its geometry is stable regardless of state. -->
+<div id="dockSentinel" style="height:0;width:100%;pointer-events:none;" aria-hidden="true"></div>
+
 <!-- Flow prompt — normal document flow, scrolls with content.
      Only visible in default + presticky phases. Hidden when docked. -->
 <div class="flow-prompt">
@@ -370,40 +380,43 @@
 
 <script>
   /* ──────────────────────────────────────────────────────
-     v15: Unified Scroll-Math State Machine
+     v16: Stable-Geometry State Machine
      ──────────────────────────────────────────────────────
      States (on <body>):
        (none)     → default: full header, column layout
-       presticky  → phase 1: title fading, nav nudging up (anticipation)
-       docked     → phase 2: compact row layout, transparent, click-through
+       presticky  → phase 1: title fading, nav nudging up
+       docked     → phase 2: compact row, transparent, click-through
 
-     All transitions are driven by a single scroll listener using
-     getBoundingClientRect() geometry:
+     KEY CHANGE FROM v15:
+     All transitions use a dock-sentinel element that is NEVER hidden
+     or collapsed. Title-row and flow-prompt use visibility:hidden in
+     docked mode (not display:none / max-height:0) so they preserve
+     layout space, keeping the sentinel geometrically stable.
 
-       Scroll down: default → presticky → docked
-         - Presticky fires when flow-prompt is within PRESTICKY_BUFFER px
-           of the header's bottom edge (the "docking line")
-         - Dock fires when flow-prompt top reaches the docking line
+     A constant DOCK_LINE (measured once in default state) serves as
+     the reference. The sentinel's viewport-relative top is compared
+     against DOCK_LINE. No dockScrollY, no IO race, no dead geometry.
 
-       Scroll up: docked → presticky → default
-         - Undock uses recorded scrollY from dock moment (robust: survives
-           flow-prompt being display:none in docked state)
-         - Presticky → default via live geometry once flow-prompt is visible
+     Strict state sequence enforced via switch:
+       Scroll down:  default → presticky → docked
+       Scroll up:    docked  → presticky → default
+       Fast scrolls cannot skip intermediate states.
 
-     Top-of-page fallback: scrollY ≤ 2 → force default (catches fast
-       scroll-to-top / programmatic scrolls)
+     Top-of-page fallback: scrollY ≤ 2 → force default.
      ────────────────────────────────────────────────────── */
 
-  const PRESTICKY_BUFFER = 80; // px before dock line to trigger presticky
-  const UNDOCK_HYSTERESIS = 40; // px of scroll-up from dock point to undock
+  const PRESTICKY_BUFFER = 80; // px above dock line to trigger presticky
+  const UNDOCK_HYSTERESIS = 40; // px below dock line to trigger undock
 
   const body = document.body;
   const headerEl = document.querySelector('.header');
-  const flowPromptEl = document.querySelector('.flow-prompt');
+  const dockSentinel = document.getElementById('dockSentinel');
 
-  let dockScrollY = null; // scrollY recorded at dock moment
+  // Measure the dock line once in default state (header bottom in pixels
+  // from viewport top). Recalculated on resize.
+  let DOCK_LINE = headerEl.getBoundingClientRect().bottom;
 
-  // State helpers — ensure only one state class is active at a time
+  // State helpers
   function setState(state) {
     body.classList.remove('presticky', 'docked');
     if (state) body.classList.add(state);
@@ -415,44 +428,54 @@
     return 'default';
   }
 
-  /* ── Unified scroll handler ── */
+  /* ── Recalculate DOCK_LINE on resize ── */
+  window.addEventListener('resize', () => {
+    // Temporarily reset to default for clean measurement
+    const prev = getState();
+    const scrollY = window.scrollY;
+    body.classList.remove('presticky', 'docked');
+    DOCK_LINE = headerEl.getBoundingClientRect().bottom;
+    if (prev === 'presticky') body.classList.add('presticky');
+    else if (prev === 'docked') body.classList.add('docked');
+  });
+
+  /* ── Strict-sequence scroll handler ── */
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
     const state = getState();
 
-    // Top-of-page reset — catches Home key, scroll-to-top, etc.
+    // Top-of-page reset
     if (y <= 2) {
       if (state !== 'default') setState(null);
-      dockScrollY = null;
       return;
     }
 
-    if (state === 'docked') {
-      /* ── UNDOCK PATH (scroll-up from docked) ──
-         Uses recorded dockScrollY instead of element geometry because
-         flow-prompt is display:none in docked mode (its rect is dead).
-         Hysteresis prevents flicker at the dock boundary. */
-      if (dockScrollY !== null && y < dockScrollY - UNDOCK_HYSTERESIS) {
-        setState('presticky'); // docked → presticky (never skip to default)
-        dockScrollY = null;
-      }
-    } else {
-      /* ── DOCK/PRESTICKY PATH (default or presticky) ──
-         Flow-prompt is visible here, so geometry is reliable. */
-      const dockLine = headerEl.getBoundingClientRect().bottom;
-      const flowTop = flowPromptEl.getBoundingClientRect().top;
+    const sentinelTop = dockSentinel.getBoundingClientRect().top;
 
-      if (flowTop <= dockLine) {
-        // Flow-prompt reached the docking line → dock
-        dockScrollY = y;
-        setState('docked');
-      } else if (flowTop <= dockLine + PRESTICKY_BUFFER) {
-        // Approaching dock → presticky (anticipation phase)
-        if (state !== 'presticky') setState('presticky');
-      } else {
-        // Far from dock → default
-        if (state !== 'default') setState(null);
-      }
+    switch (state) {
+      case 'default':
+        // Can only advance to presticky (never skip to docked)
+        if (sentinelTop <= DOCK_LINE + PRESTICKY_BUFFER) {
+          setState('presticky');
+        }
+        break;
+
+      case 'presticky':
+        if (sentinelTop <= DOCK_LINE) {
+          // Sentinel reached dock line → dock
+          setState('docked');
+        } else if (sentinelTop > DOCK_LINE + PRESTICKY_BUFFER) {
+          // Scrolled back up past presticky zone → default
+          setState(null);
+        }
+        break;
+
+      case 'docked':
+        // Can only retreat to presticky (never skip to default)
+        if (sentinelTop > DOCK_LINE + UNDOCK_HYSTERESIS) {
+          setState('presticky');
+        }
+        break;
     }
   }, { passive: true });
 
