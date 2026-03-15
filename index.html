@@ -74,10 +74,9 @@
     transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
   }
 
-  /* Presticky: prompt stays in normal flow — no collapse, no hiding.
-     Only nav controls get the anticipation preview; prompt remains
-     in its natural header position until the docked phase pulls it
-     into the compact sticky row. */
+  /* Presticky: the flow-prompt (outside header) remains visible in normal
+     document flow. Only nav controls get the anticipation preview.
+     The in-header prompt-row stays hidden until the docked phase. */
 
   /* ── PHASE 2: DOCKED ──
      Compact single-row layout, transparent + click-through.
@@ -164,16 +163,27 @@
     transition: none;
   }
 
-  /* Row 3: Prompt — re-enable pointer events for interactive controls.
-     Stays in normal flow through default and presticky phases;
-     only docked phase repositions it into the compact sticky row. */
+  /* Row 3: Prompt (inside header) — hidden by default, only shown in docked.
+     A separate .flow-prompt in normal document flow handles default/presticky. */
   .prompt-row {
-    display: flex;
+    display: none;
     justify-content: center;
     pointer-events: auto;
-    max-height: 200px;
     overflow: hidden;
-    transition: max-height var(--transition-speed) ease, opacity var(--transition-speed) ease;
+  }
+
+  /* Flow prompt — lives outside the sticky header in normal document flow.
+     Visible in default + presticky; hidden when docked. */
+  .flow-prompt {
+    display: flex;
+    justify-content: center;
+    padding: 0 24px 16px;
+    pointer-events: auto;
+    transition: opacity var(--transition-speed) ease;
+  }
+
+  body.docked .flow-prompt {
+    display: none;
   }
 
   .prompt-box {
@@ -192,9 +202,9 @@
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
   }
 
-  /* Prompt row fills remaining space in docked single-row layout.
-     Explicitly restore visibility — overrides presticky collapse. */
+  /* Prompt row shown only in docked — fills remaining space in single-row layout. */
   body.docked .prompt-row {
+    display: flex;
     flex: 1;
     min-width: 0;
     margin: 0;
@@ -332,6 +342,7 @@
   @media (max-width: 500px) {
     .grid { grid-template-columns: repeat(2, 1fr); padding: 8px 12px 40px; }
     .header { padding: 24px 12px 18px; }
+    .flow-prompt { padding: 0 12px 12px; }
     body.docked .header { padding: 10px 12px; }
   }
 </style>
@@ -362,11 +373,20 @@
   </div>
   <div class="prompt-row">
     <div class="prompt-box">
-      <textarea class="prompt-input" placeholder="Describe what you're looking for…" rows="1"></textarea>
+      <textarea class="prompt-input" id="dockedPromptInput" placeholder="Describe what you're looking for…" rows="1"></textarea>
       <button class="btn-submit">Submit</button>
     </div>
   </div>
 </header>
+
+<!-- Flow prompt — normal document flow, scrolls with content.
+     Only visible in default + presticky phases. Hidden when docked. -->
+<div class="flow-prompt">
+  <div class="prompt-box">
+    <textarea class="prompt-input" id="flowPromptInput" placeholder="Describe what you're looking for…" rows="1"></textarea>
+    <button class="btn-submit">Submit</button>
+  </div>
+</div>
 
 <!-- IMAGE GRID -->
 <div class="grid" id="grid"></div>
@@ -481,6 +501,13 @@
       ta.addEventListener('input', () => {
         ta.style.height = 'auto';
         ta.style.height = ta.scrollHeight + 'px';
+        // Also resize the paired textarea
+        document.querySelectorAll('.prompt-input').forEach(other => {
+          if (other !== ta) {
+            other.style.height = 'auto';
+            other.style.height = other.scrollHeight + 'px';
+          }
+        });
       });
     });
   }
@@ -548,6 +575,35 @@
 
   fillUntilScrollable();
   loadObserver.observe(loadSentinel);
+
+  /* ── Dual-prompt content sync ──
+     Two prompt textareas exist: one in normal flow (#flowPromptInput),
+     one inside the sticky header (#dockedPromptInput, visible only when docked).
+     Keep their values in sync so the user never loses typed text. */
+  const flowInput = document.getElementById('flowPromptInput');
+  const dockedInput = document.getElementById('dockedPromptInput');
+
+  flowInput.addEventListener('input', () => {
+    dockedInput.value = flowInput.value;
+  });
+  dockedInput.addEventListener('input', () => {
+    flowInput.value = dockedInput.value;
+  });
+
+  /* On state change, transfer focus to the visible prompt if user was typing */
+  const origSetState = setState;
+  setState = function(state) {
+    const hadFocusFlow = document.activeElement === flowInput;
+    const hadFocusDocked = document.activeElement === dockedInput;
+    origSetState(state);
+    if (state === 'docked' && hadFocusFlow) {
+      dockedInput.focus();
+      dockedInput.selectionStart = dockedInput.selectionEnd = dockedInput.value.length;
+    } else if (state !== 'docked' && hadFocusDocked) {
+      flowInput.focus();
+      flowInput.selectionStart = flowInput.selectionEnd = flowInput.value.length;
+    }
+  };
 </script>
 </body>
 </html>
