@@ -41,7 +41,7 @@
     flex-direction: column;
     gap: 0;
     background: var(--color-bg);
-    transition: box-shadow 0.2s ease;
+    transition: box-shadow 0.2s ease, padding var(--transition-speed) ease;
   }
 
   /* ── PHASE 1: PRESTICKY ──
@@ -52,9 +52,10 @@
     transition: opacity var(--transition-speed) ease;
   }
 
-  /* Nav row gets a subtle upward nudge to anticipate the dock */
+  /* Nav row gets an upward nudge to bridge the gap toward docked position,
+     reducing perceived vertical jump when padding transitions at dock. */
   body.presticky .nav-row {
-    transform: translateY(-2px);
+    transform: translateY(-8px);
     transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
   }
 
@@ -209,10 +210,14 @@
     transform: none;
   }
 
-  /* Docked state: keep controls visually identical to normal state. */
-  body.docked .btn-back,
-  body.docked .dropdown-select {
+  /* Docked state: keep controls visually identical to normal state.
+     Dropdown uses longhand to preserve padding-right:28px for chevron. */
+  body.docked .btn-back {
     padding: 6px 12px;
+    font-size: 14px;
+  }
+  body.docked .dropdown-select {
+    padding: 6px 28px 6px 12px;
     font-size: 14px;
   }
 
