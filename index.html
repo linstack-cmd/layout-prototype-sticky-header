@@ -349,14 +349,6 @@
 </head>
 <body>
 
-<!-- Presticky sentinel: triggers phase 1 (anticipation).
-     Placed above the dock sentinel so it leaves the viewport first. -->
-<div class="presticky-sentinel" id="prestickySentinel" aria-hidden="true"></div>
-
-<!-- Dock sentinel: triggers phase 2 (full dock).
-     When this leaves the viewport, prompt reaches sticky threshold. -->
-<div class="scroll-sentinel" id="dockSentinel" aria-hidden="true"></div>
-
 <!-- SINGLE HEADER — sticky-positioned, 2-phase state-driven collapse -->
 <header class="header">
   <div class="nav-row">
@@ -379,6 +371,11 @@
   </div>
 </header>
 
+<!-- Presticky sentinel: triggers phase 1 (anticipation).
+     Placed AFTER header / BEFORE flow-prompt so there's a real scroll
+     distance before presticky fires — creates the anticipation window. -->
+<div class="presticky-sentinel" id="prestickySentinel" aria-hidden="true"></div>
+
 <!-- Flow prompt — normal document flow, scrolls with content.
      Only visible in default + presticky phases. Hidden when docked. -->
 <div class="flow-prompt">
@@ -387,6 +384,10 @@
     <button class="btn-submit">Submit</button>
   </div>
 </div>
+
+<!-- Dock sentinel: triggers phase 2 (full dock).
+     Placed AFTER flow-prompt so docking occurs when prompt actually scrolls out. -->
+<div class="scroll-sentinel" id="dockSentinel" aria-hidden="true"></div>
 
 <!-- IMAGE GRID -->
 <div class="grid" id="grid"></div>
@@ -426,15 +427,16 @@
   }
 
   /* Observer 1: Presticky phase
-     Uses a positive rootMargin so it fires BEFORE the sentinel
-     actually leaves the viewport — giving us an anticipation zone. */
+     Sentinel is now positioned between header and flow-prompt in the DOM,
+     so it has real scroll distance before leaving the viewport.
+     A small negative top rootMargin (-40px) triggers slightly before the
+     sentinel actually leaves, giving a smooth anticipation feel. */
   const prestickyObserver = new IntersectionObserver(
     ([entry]) => {
       if (!entry.isIntersecting) {
-        // Guard: don't activate presticky at scroll=0 — the negative rootMargin
-        // can cause the sentinel to appear non-intersecting before any scroll.
+        // Guard: don't activate presticky at near-zero scroll
         if (window.scrollY < 10) return;
-        // Sentinel left the expanded viewport → at least presticky
+        // Sentinel left viewport → at least presticky
         // (dockObserver will upgrade to 'docked' if needed)
         if (!body.classList.contains('docked')) {
           setState('presticky');
@@ -447,7 +449,7 @@
         }
       }
     },
-    { threshold: 0, rootMargin: `-${PRESTICKY_OFFSET}px 0px 0px 0px` }
+    { threshold: 0, rootMargin: '-40px 0px 0px 0px' }
   );
 
   /* Observer 2: Dock phase
@@ -483,6 +485,15 @@
      the exit hysteresis band to prevent flicker near the threshold. */
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
+
+    // Explicit top-of-page fallback: if near the very top, force default state.
+    // Catches edge cases where IntersectionObserver doesn't fire on fast scroll-to-top.
+    if (y <= 10) {
+      if (body.classList.contains('presticky') || body.classList.contains('docked')) {
+        setState(null);
+      }
+      return;
+    }
 
     if (dockSentinelGone && !body.classList.contains('docked') && y >= MIN_DOCK_SCROLL) {
       // Sentinel already gone + crossed min threshold → promote to docked
