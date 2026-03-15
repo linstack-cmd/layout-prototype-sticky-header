@@ -402,28 +402,30 @@
 
 <script>
   /* ──────────────────────────────────────────────────────
-     2-Phase Sticky Transition — State Machine
+     2-Phase Sticky Transition — Geometry-Driven State Machine
      ──────────────────────────────────────────────────────
      States (on <body>):
        (none)     → default: full header, column layout
        presticky  → phase 1: title fading, nav nudging up (anticipation)
        docked     → phase 2: compact row layout, transparent, click-through
 
-     Two IntersectionObservers drive the state machine:
-       1. prestickySentinel — fires first (has rootMargin offset)
-       2. dockSentinel — fires at actual sticky threshold
+     Transitions are driven by real element geometry:
+       - Presticky: IntersectionObserver on prestickySentinel
+       - Dock/Undock: scroll listener comparing flow-prompt / dock-sentinel
+         position against the sticky header's bottom edge (the "docking line")
+
+     No hardcoded scroll thresholds — docking fires exactly when the
+     flow-prompt reaches the header's bottom edge.
 
      Scroll down: default → presticky → docked
      Scroll up:   docked → presticky → default
      ────────────────────────────────────────────────────── */
 
-  const PRESTICKY_OFFSET = 150; // px before dock threshold to trigger presticky
-  const MIN_DOCK_SCROLL = 120;  // minimum scrollY to ENTER docked state
-  const DOCK_EXIT_SCROLL = 60;  // scrollY below which we EXIT docked (hysteresis band)
+  const DOCK_HYSTERESIS = 10; // px below docking line before undocking (prevents flicker)
   const body = document.body;
-
-  // Track whether the dock sentinel is currently out of view
-  let dockSentinelGone = false;
+  const headerEl = document.querySelector('.header');
+  const flowPromptEl = document.querySelector('.flow-prompt');
+  const dockSentinelEl = document.getElementById('dockSentinel');
 
   // State helpers — ensure only one state class is active at a time
   function setState(state) {
@@ -431,8 +433,8 @@
     if (state) body.classList.add(state);
   }
 
-  /* Observer 1: Presticky phase
-     Sentinel is now positioned between header and flow-prompt in the DOM,
+  /* Observer: Presticky phase
+     Sentinel is positioned between header and flow-prompt in the DOM,
      so it has real scroll distance before leaving the viewport.
      A small negative top rootMargin (-40px) triggers slightly before the
      sentinel actually leaves, giving a smooth anticipation feel. */
@@ -442,7 +444,6 @@
         // Guard: don't activate presticky at near-zero scroll
         if (window.scrollY < 10) return;
         // Sentinel left viewport → at least presticky
-        // (dockObserver will upgrade to 'docked' if needed)
         if (!body.classList.contains('docked')) {
           setState('presticky');
         }
@@ -457,56 +458,48 @@
     { threshold: 0, rootMargin: '-40px 0px 0px 0px' }
   );
 
-  /* Observer 2: Dock phase
-     No rootMargin — fires when sentinel actually leaves the viewport.
-     Combined with scrollY guard so tiny scrolls don't trigger docked mode. */
-  const dockObserver = new IntersectionObserver(
-    ([entry]) => {
-      dockSentinelGone = !entry.isIntersecting;
-      if (!entry.isIntersecting) {
-        // Sentinel gone — only dock if scrolled far enough
-        if (window.scrollY >= MIN_DOCK_SCROLL) {
-          setState('docked');
-        }
-        // If not far enough, scroll listener below will promote when threshold met
-      } else {
-        // Sentinel back → drop from docked to presticky
-        // (prestickyObserver will further drop to default if needed)
-        if (body.classList.contains('docked')) {
-          setState('presticky');
-        }
-      }
-    },
-    { threshold: 0 }
-  );
-
   prestickyObserver.observe(document.getElementById('prestickySentinel'));
-  dockObserver.observe(document.getElementById('dockSentinel'));
 
-  /* ── Scroll-based state reconciliation ──
-     The IntersectionObserver only fires on crossing boundaries. If the user
-     scrolls past the sentinel but hasn't hit MIN_DOCK_SCROLL yet, the observer
-     won't re-fire. This passive scroll listener fills the gap and also handles
-     the exit hysteresis band to prevent flicker near the threshold. */
+  /* ── Geometry-driven dock/undock ──
+     Uses getBoundingClientRect() to compare element positions against the
+     sticky header's bottom edge (the "docking line").
+
+     Dock trigger: flow-prompt's top edge reaches the header's bottom edge.
+       This means the prompt is about to be obscured — time to dock it.
+
+     Undock trigger: dock-sentinel's top moves DOCK_HYSTERESIS px below the
+       header's bottom edge. The sentinel is always in document flow (even
+       when flow-prompt is display:none in docked state), so it serves as
+       the geometry anchor for scroll-up detection. The hysteresis gap
+       prevents rapid dock/undock flicker at the boundary.
+
+     Top-of-page reset: force default when scrollY ≤ 2 to catch fast
+       scroll-to-top / programmatic scrolls that observers might miss. */
   window.addEventListener('scroll', () => {
     const y = window.scrollY;
 
-    // Explicit top-of-page fallback: if near the very top, force default state.
-    // Catches edge cases where IntersectionObserver doesn't fire on fast scroll-to-top.
-    if (y <= 10) {
+    // Top-of-page reset
+    if (y <= 2) {
       if (body.classList.contains('presticky') || body.classList.contains('docked')) {
         setState(null);
       }
       return;
     }
 
-    if (dockSentinelGone && !body.classList.contains('docked') && y >= MIN_DOCK_SCROLL) {
-      // Sentinel already gone + crossed min threshold → promote to docked
-      setState('docked');
-    } else if (body.classList.contains('docked') && y < DOCK_EXIT_SCROLL) {
-      // Scrolled back into hysteresis band → drop to presticky
-      // (prestickyObserver handles the rest back to default)
-      setState('presticky');
+    const dockLine = headerEl.getBoundingClientRect().bottom;
+
+    if (!body.classList.contains('docked')) {
+      // Dock when flow-prompt top reaches the header bottom (docking line)
+      const flowTop = flowPromptEl.getBoundingClientRect().top;
+      if (flowTop <= dockLine) {
+        setState('docked');
+      }
+    } else {
+      // Undock when dock-sentinel top is sufficiently below the docking line
+      const sentinelTop = dockSentinelEl.getBoundingClientRect().top;
+      if (sentinelTop > dockLine + DOCK_HYSTERESIS) {
+        setState('presticky');
+      }
     }
   }, { passive: true });
 
