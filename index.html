@@ -59,6 +59,14 @@
     transition: transform var(--transition-speed) ease, opacity var(--transition-speed) ease;
   }
 
+  /* FLIP bridge: applied by JS when entering/leaving docked to smooth the
+     discrete layout shift (flex-direction column→row, padding jump).
+     The animation is set by JS via inline style; this class just opts in
+     to the transition so the compensating transform animates to zero. */
+  .nav-row.flip-bridge {
+    transition: transform var(--transition-speed) ease !important;
+  }
+
   /* ── PHASE 2: DOCKED ──
      Compact single-row layout, transparent + click-through.
      pointer-events:none lets clicks pass through to content behind;
@@ -217,7 +225,10 @@
     font-size: 14px;
   }
   body.docked .dropdown-select {
-    padding: 6px 28px 6px 12px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    padding-left: 12px;
+    padding-right: 28px;
     font-size: 14px;
   }
 
@@ -422,9 +433,43 @@
   let DOCK_LINE = headerEl.getBoundingClientRect().bottom;
 
   // State helpers
+  const navRow = document.querySelector('.nav-row');
+
   function setState(state) {
+    const prev = getState();
+    const dockTransition = (prev === 'presticky' && state === 'docked') ||
+                           (prev === 'docked' && state === 'presticky');
+
+    // FLIP: record nav position before layout change
+    let navBefore;
+    if (dockTransition) {
+      navBefore = navRow.getBoundingClientRect().top;
+      // Remove any in-flight FLIP so measurement is clean
+      navRow.classList.remove('flip-bridge');
+      navRow.style.transform = '';
+    }
+
     body.classList.remove('presticky', 'docked');
     if (state) body.classList.add(state);
+
+    // FLIP: measure after, apply compensating transform, animate to 0
+    if (dockTransition) {
+      const navAfter = navRow.getBoundingClientRect().top;
+      const delta = navBefore - navAfter;
+      if (Math.abs(delta) > 1) {
+        navRow.style.transform = `translateY(${delta}px)`;
+        // Force layout so the browser registers the starting transform
+        navRow.offsetHeight; // eslint-disable-line no-unused-expressions
+        navRow.classList.add('flip-bridge');
+        navRow.style.transform = '';
+        // Clean up class after transition ends
+        const onEnd = () => {
+          navRow.classList.remove('flip-bridge');
+          navRow.removeEventListener('transitionend', onEnd);
+        };
+        navRow.addEventListener('transitionend', onEnd);
+      }
+    }
   }
 
   function getState() {
